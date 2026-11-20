@@ -1,0 +1,9 @@
+{
+  "input": "data/images/04_monstera_plant.png",
+  "prompt": "monstera plant",
+  "box_xyxy": null,
+  "sam_model": "facebook/sam3",
+  "depth_model": "depth-anything/Depth-Anything-V2-Small-hf",
+  "device": "mps",
+  "depth_note": "Relative monocular depth; not metric distance."
+}
