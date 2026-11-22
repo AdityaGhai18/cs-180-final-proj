@@ -1,16 +1,16 @@
-# Project status · text-prompt segmentation and depth
+# Project status · texture wrapping
 
 ## Current checkpoint
 
-The image pipeline supports both SAM 3's native text prompt and a SAM ViT-B
-pixel-box prompt. The text mode is retained for when gated SAM 3 access is
-approved. The box mode runs without SAM 3 access and still produces a mask
-followed by Depth Anything V2 relative depth. Texture projection, mesh
-construction, and video processing are later project steps.
+The image pipeline takes an image, a texture, and a text prompt. SAM 3 produces
+the object mask from the prompt, Depth Anything V2 produces relative depth, and
+a naive composite tiles the texture inside the mask with luminance shading.
+
+## Next
+
+- Use depth (surface normals) to warp the texture onto the object instead of tiling it flat.
+- Extend from single images to video with temporally consistent texture.
 
 ## Run
 
-Install the updated requirements, then run `src/image_pipeline.py` with
-`--image` and exactly one of `--box` or `--prompt`. Example commands are in
-`README.md`. The box mode downloads public SAM ViT-B weights; text mode requires
-approved Hugging Face access to SAM 3.
+See `README.md`. SAM 3 requires approved Hugging Face access to `facebook/sam3`.
