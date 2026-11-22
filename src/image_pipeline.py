@@ -102,6 +102,7 @@ def save_outputs(
     mask_u8 = mask.astype(np.uint8) * 255
     Image.fromarray(mask_u8).save(output_dir / "sam_mask.png")
     Image.fromarray(textured).save(output_dir / "textured.png")
+    np.save(output_dir / "depth.npy", depth.astype(np.float16))
 
     low, high = np.percentile(depth, (2, 98))
     depth_vis = np.clip((depth - low) / max(float(high - low), 1e-6), 0, 1)

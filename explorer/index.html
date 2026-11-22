@@ -1,0 +1,387 @@
+<title>Mask + Depth Explorer</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@500;600;700&display=swap">
+<style>
+/* Layout: one reading column — header, pipeline chips, object tabs, five output panels, then the 3D viewer beside a stats rail. */
+:root {
+  --bg: #f4f5f7;
+  --surface: #ffffff;
+  --sunken: #eceef2;
+  --line: #d9dde4;
+  --fg: #171a20;
+  --muted: #5a6170;
+  --accent: #c25e16;
+  --accent-soft: rgba(194, 94, 22, 0.14);
+  --bar: #d9dde4;
+  --font-display: "Space Grotesk", "Inter", system-ui, sans-serif;
+  --font-body: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #14161b; --surface: #1b1e24; --sunken: #111317; --line: #2b3038;
+    --fg: #e8eaee; --muted: #9aa1ad; --accent: #f0954a; --accent-soft: rgba(240, 149, 74, 0.16);
+    --bar: #2b3038; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #14161b; --surface: #1b1e24; --sunken: #111317; --line: #2b3038;
+  --fg: #e8eaee; --muted: #9aa1ad; --accent: #f0954a; --accent-soft: rgba(240, 149, 74, 0.16);
+  --bar: #2b3038; color-scheme: dark;
+}
+
+body { background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 15px; line-height: 1.55; }
+.wrap {
+  max-width: 1180px; margin: 0 auto;
+  padding-block: 40px 64px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: grid; gap: 28px;
+}
+header { display: grid; gap: 12px; }
+.eyebrow { font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); }
+h1 { font-family: var(--font-display); font-weight: 700; font-size: clamp(28px, 4vw, 38px); line-height: 1.1; margin: 0; text-wrap: balance; }
+h2 { font-family: var(--font-display); font-weight: 600; font-size: 19px; margin: 0; text-wrap: balance; }
+.lede { max-width: 66ch; color: var(--muted); margin: 0; }
+code { font-family: var(--font-mono); font-size: 0.88em; color: var(--fg); }
+
+.chips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.chip { font-family: var(--font-mono); font-size: 12.5px; padding: 5px 10px; border: 1px solid var(--line); border-radius: 4px; background: var(--surface); }
+.chip.model { color: var(--accent); }
+.arrow { color: var(--muted); font-size: 12px; }
+
+.tabs { display: flex; flex-wrap: wrap; gap: 8px; }
+.tab {
+  font: 500 14px var(--font-body); color: var(--fg); background: var(--surface);
+  border: 1px solid var(--line); border-radius: 999px; padding: 7px 16px; cursor: pointer;
+}
+.tab:hover { border-color: var(--muted); }
+.tab[aria-selected="true"] { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+.tab:focus-visible, button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.panels { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 14px; }
+.panel { display: grid; gap: 8px; margin: 0; min-width: 0; }
+.panel .frame { aspect-ratio: 1; max-width: 100%; border: 1px solid var(--line); border-radius: 4px; overflow: hidden; background: var(--sunken); }
+.panel img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.panel figcaption { display: grid; gap: 2px; font-size: 13px; }
+.panel figcaption b { font-weight: 600; }
+.panel figcaption b span { color: var(--accent); font-family: var(--font-mono); margin-right: 4px; }
+.panel figcaption small { color: var(--muted); font-size: 12.5px; }
+
+.lower { display: grid; grid-template-columns: minmax(0, 1.65fr) minmax(0, 1fr); gap: 28px; align-items: start; }
+.viewer-card { border: 1px solid var(--line); border-radius: 6px; background: var(--surface); display: grid; }
+.viewer-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 14px 16px 0; flex-wrap: wrap; }
+.viewer-head .hint { font-size: 12.5px; color: var(--muted); }
+#viewer { position: relative; height: 520px; cursor: grab; touch-action: none; }
+#viewer:active { cursor: grabbing; }
+#viewer canvas { display: block; width: 100%; height: 100%; }
+#viewer .status { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); font-size: 14px; text-align: center; padding: 16px; }
+.controls { display: flex; flex-wrap: wrap; gap: 14px 22px; align-items: center; padding: 12px 16px; border-top: 1px solid var(--line); font-size: 13.5px; }
+.controls label { display: inline-flex; align-items: center; gap: 8px; }
+.controls input[type="range"] { width: 110px; accent-color: var(--accent); }
+.controls input[type="checkbox"] { accent-color: var(--accent); }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 4px; overflow: hidden; }
+.seg button { font: 500 12.5px var(--font-body); color: var(--muted); background: transparent; border: 0; padding: 5px 10px; cursor: pointer; }
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button[aria-pressed="true"] { background: var(--accent-soft); color: var(--fg); }
+.btn { font: 500 12.5px var(--font-body); color: var(--fg); background: transparent; border: 1px solid var(--line); border-radius: 4px; padding: 5px 10px; cursor: pointer; }
+.btn:hover { border-color: var(--muted); }
+.viewer-foot { padding: 0 16px 14px; font-size: 12.5px; color: var(--muted); margin: 0; }
+
+aside { display: grid; gap: 26px; min-width: 0; }
+.stats { display: grid; gap: 10px; border-top: 1px solid var(--line); padding-top: 12px; margin: 0; }
+.row { display: flex; justify-content: space-between; gap: 12px; font-size: 14px; }
+.row dt { color: var(--muted); }
+.row dd { margin: 0; font-family: var(--font-mono); font-variant-numeric: tabular-nums; text-align: right; min-width: 0; overflow-wrap: anywhere; }
+.bar { height: 6px; border-radius: 3px; background: var(--bar); overflow: hidden; margin-top: -4px; }
+.bar i { display: block; height: 100%; background: var(--accent); border-radius: 3px; transition: width 300ms ease; }
+.notes { display: grid; gap: 14px; }
+.notes p { margin: 0; padding-left: 12px; border-left: 2px solid var(--line); font-size: 14px; }
+.notes b { font-weight: 600; }
+
+@media (max-width: 960px) {
+  .panels { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .lower { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 560px) {
+  .panels { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  #viewer { height: 380px; }
+}
+@media (prefers-reduced-motion: reduce) { .bar i { transition: none; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">CS 180 final project · checkpoint run</div>
+    <h1>Mask + Depth Explorer</h1>
+    <p class="lede">Each photo goes through <code>src/image_pipeline.py</code> with three inputs: the photo, a texture, and a text prompt naming the object. SAM 3 cuts out whatever the prompt describes, Depth Anything V2 estimates how near every pixel is, and the texture is laid inside the mask. These outputs come from a fresh run on Apple silicon (MPS).</p>
+    <div class="chips" aria-label="Pipeline steps">
+      <span class="chip">photo + text prompt</span><span class="arrow">→</span>
+      <span class="chip model">SAM 3</span><span class="arrow">→</span>
+      <span class="chip">object mask</span><span class="arrow">+</span>
+      <span class="chip model">Depth Anything V2</span><span class="arrow">→</span>
+      <span class="chip">relative depth</span><span class="arrow">+</span>
+      <span class="chip">texture</span><span class="arrow">→</span>
+      <span class="chip">textured object</span>
+    </div>
+  </header>
+
+  <nav class="tabs" role="tablist" id="tabs" aria-label="Choose an example"></nav>
+
+  <section class="panels" id="panels" aria-label="Pipeline outputs">
+    <figure class="panel"><div class="frame"><img id="p-input" alt="Input photo"></div>
+      <figcaption><b><span>1</span>Input + text prompt</b><small id="c-input">Prompt</small></figcaption></figure>
+    <figure class="panel"><div class="frame"><img id="p-mask" alt="SAM 3 mask"></div>
+      <figcaption><b><span>2</span>SAM 3 mask</b><small>White = object, black = everything else</small></figcaption></figure>
+    <figure class="panel"><div class="frame"><img id="p-depth" alt="Relative depth map"></div>
+      <figcaption><b><span>3</span>Relative depth</b><small>Inferno colormap, bright = near</small></figcaption></figure>
+    <figure class="panel"><div class="frame"><img id="p-isolated" alt="Object isolated by the mask"></div>
+      <figcaption><b><span>4</span>Object isolated</b><small>Photo kept only inside the mask</small></figcaption></figure>
+    <figure class="panel"><div class="frame"><img id="p-textured" alt="Texture applied inside the mask"></div>
+      <figcaption><b><span>5</span>Textured (naive)</b><small>Tiled texture × photo brightness</small></figcaption></figure>
+  </section>
+
+  <section class="lower">
+    <div class="viewer-card">
+      <div class="viewer-head">
+        <h2>Object lifted into 3D</h2>
+        <span class="hint">Drag to rotate · scroll or pinch to zoom · right-drag to pan</span>
+      </div>
+      <div id="viewer"><div class="status" id="status">Loading point cloud…</div></div>
+      <div class="controls">
+        <label for="autorotate"><input type="checkbox" id="autorotate" checked> Auto-rotate</label>
+        <label for="exag">Depth exaggeration <input type="range" id="exag" min="0" max="1.5" step="0.01" value="0.45"></label>
+        <label for="psize">Point size <input type="range" id="psize" min="0.5" max="3" step="0.05" value="1.3"></label>
+        <span class="seg" role="group" aria-label="Point color">
+          <button type="button" data-color="photo" aria-pressed="true">Photo</button>
+          <button type="button" data-color="tex" aria-pressed="false">Textured</button>
+          <button type="button" data-color="depth" aria-pressed="false">Depth</button>
+        </span>
+        <label for="showbg"><input type="checkbox" id="showbg"> Show background</label>
+        <button type="button" class="btn" id="reset">Reset view</button>
+      </div>
+      <p class="viewer-foot" id="viewer-foot">Every 4th pixel inside the mask, placed at (x, y, relative depth). Depth is unitless, so the slider only changes how deep the relief looks.</p>
+    </div>
+
+    <aside>
+      <div style="display:grid; gap:12px;">
+        <h2 id="s-title">—</h2>
+        <dl class="stats">
+          <div class="row"><dt>Text prompt</dt><dd id="s-prompt">—</dd></div>
+          <div class="row"><dt>SAM 3 confidence</dt><dd id="s-score">—</dd></div>
+          <div class="row"><dt>Image size</dt><dd id="s-size">—</dd></div>
+          <div class="row"><dt>Mask coverage</dt><dd id="s-cov">—</dd></div>
+          <div class="row"><dt>Mean depth · object</dt><dd id="s-dobj">—</dd></div>
+          <div class="bar" aria-hidden="true"><i id="b-dobj"></i></div>
+          <div class="row"><dt>Mean depth · background</dt><dd id="s-dbg">—</dd></div>
+          <div class="bar" aria-hidden="true"><i id="b-dbg"></i></div>
+          <div class="row"><dt>3D points (object)</dt><dd id="s-pts">—</dd></div>
+        </dl>
+      </div>
+      <div class="notes">
+        <h2>Reading the panels</h2>
+        <p><b>Text prompt.</b> SAM 3 gets only the words and returns every matching instance; the pipeline keeps the highest-confidence mask.</p>
+        <p><b>Relative depth.</b> Brighter means closer. Depth Anything gives an ordering, not meters, and the pipeline stretches the 2nd–98th percentile to 0–1 per image, so numbers aren't comparable across photos.</p>
+        <p id="note-look"><b>What to look for.</b> —</p>
+        <p><b>Texture.</b> The texture is tiled flat and shaded by photo brightness. It ignores depth, which is why it reads as a tint. Wrapping it along the relief you see in 3D is the next step.</p>
+      </div>
+    </aside>
+  </section>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script>
+(() => {
+  const NAMES = { tabby_cat: "Tabby cat", running_shoe: "Running shoe", monstera_plant: "Monstera plant" };
+  const LOOK = {
+    tabby_cat: (r) => `The cat sits clearly in front of the sofa and wall (mean depth ${r.mean_depth_object.toFixed(2)} vs ${r.mean_depth_background.toFixed(2)}), and the rug fades smoothly from near to far. In 3D the head and chest bulge forward of the tail.`,
+    running_shoe: (r) => `The shoe is closer than its surroundings (${r.mean_depth_object.toFixed(2)} vs ${r.mean_depth_background.toFixed(2)}), but the stone step in front of it is nearer still. In 3D the toe box comes forward and the heel recedes.`,
+    monstera_plant: (r) => `The mask covers the leaves but not the pot, which matches the prompt. Leaves facing the camera are the brightest in depth (${r.mean_depth_object.toFixed(2)} vs ${r.mean_depth_background.toFixed(2)}), so in 3D they separate into layers.`,
+  };
+  const INFERNO = [[0,0,4],[27,12,65],[74,12,107],[120,28,109],[165,44,96],[207,68,70],[237,105,37],[251,155,6],[252,255,164]];
+  const $ = (id) => document.getElementById(id);
+  const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  let runs = [], current = null, colorMode = "photo";
+  let renderer, scene, camera, controls, objPoints, bgPoints;
+
+  const toHash = (id) => id.replace(/_/g, "-");
+  const fromHash = (h) => h.replace(/^#/, "").replace(/-/g, "_");
+
+  function bytes(s) {
+    const bin = atob(s), out = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out;
+  }
+  function inferno(t) {
+    const x = Math.min(Math.max(t, 0), 1) * (INFERNO.length - 1), i = Math.min(Math.floor(x), INFERNO.length - 2), f = x - i;
+    const a = INFERNO[i], b = INFERNO[i + 1];
+    return [0, 1, 2].map((k) => (a[k] + (b[k] - a[k]) * f) / 255);
+  }
+  function decode(cloud) {
+    return {
+      n: cloud.count,
+      xy: new Uint16Array(bytes(cloud.xy).buffer),
+      z: bytes(cloud.z),
+      rgb: bytes(cloud.rgb),
+      tex: cloud.tex ? bytes(cloud.tex) : null,
+    };
+  }
+
+  function initThree() {
+    const host = $("viewer");
+    renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    host.appendChild(renderer.domElement);
+    scene = new THREE.Scene();
+    camera = new THREE.PerspectiveCamera(35, 1, 0.01, 50);
+    controls = new THREE.OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.autoRotateSpeed = 1.6;
+    controls.autoRotate = !reduceMotion;
+    $("autorotate").checked = controls.autoRotate;
+    const resize = () => {
+      const w = host.clientWidth, h = host.clientHeight;
+      renderer.setSize(w, h, false);
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
+    };
+    new ResizeObserver(resize).observe(host);
+    resize();
+    renderer.setAnimationLoop(() => { controls.update(); renderer.render(scene, camera); });
+  }
+
+  function makePoints(cloud, isBg) {
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(cloud.n * 3), 3));
+    geo.setAttribute("color", new THREE.BufferAttribute(new Float32Array(cloud.n * 3), 3));
+    const mat = new THREE.PointsMaterial({ size: 0.004, vertexColors: true, sizeAttenuation: true, transparent: isBg, opacity: isBg ? 0.35 : 1, depthWrite: !isBg });
+    const pts = new THREE.Points(geo, mat);
+    pts.userData.cloud = cloud;
+    pts.userData.isBg = isBg;
+    return pts;
+  }
+
+  function layout() {
+    if (!current) return;
+    const r = current.run, s = 1 / Math.max(r.width, r.height), k = parseFloat($("exag").value);
+    const zc = r.mean_depth_object;
+    for (const pts of [objPoints, bgPoints]) {
+      const c = pts.userData.cloud, pos = pts.geometry.attributes.position.array;
+      for (let i = 0; i < c.n; i++) {
+        pos[3 * i] = (c.xy[2 * i] - current.cx) * s;
+        pos[3 * i + 1] = -(c.xy[2 * i + 1] - current.cy) * s;
+        pos[3 * i + 2] = (c.z[i] / 255 - zc) * k;
+      }
+      pts.geometry.attributes.position.needsUpdate = true;
+      pts.geometry.computeBoundingSphere();
+    }
+  }
+
+  function recolor() {
+    for (const pts of [objPoints, bgPoints]) {
+      const c = pts.userData.cloud, col = pts.geometry.attributes.color.array;
+      const mode = pts.userData.isBg && colorMode === "tex" ? "photo" : colorMode;
+      for (let i = 0; i < c.n; i++) {
+        let rgb;
+        if (mode === "depth") rgb = inferno(c.z[i] / 255);
+        else { const src = mode === "tex" ? c.tex : c.rgb; rgb = [src[3 * i] / 255, src[3 * i + 1] / 255, src[3 * i + 2] / 255]; }
+        col[3 * i] = rgb[0]; col[3 * i + 1] = rgb[1]; col[3 * i + 2] = rgb[2];
+      }
+      pts.geometry.attributes.color.needsUpdate = true;
+    }
+  }
+
+  function resizePoints() {
+    if (!current) return;
+    const base = (current.run.object_stride / Math.max(current.run.width, current.run.height)) * parseFloat($("psize").value);
+    objPoints.material.size = base;
+    bgPoints.material.size = base * (current.run.background_stride / current.run.object_stride) * 0.55;
+  }
+
+  function resetView() {
+    if (!current) return;
+    const r = current.run, s = 1 / Math.max(r.width, r.height);
+    const span = Math.max(current.w * s, current.h * s) * 1.25;
+    const dist = span / (2 * Math.tan((camera.fov * Math.PI) / 360)) / Math.min(1, camera.aspect);
+    const dir = new THREE.Vector3(0.42, 0.12, 1).normalize();
+    controls.target.set(0, 0, 0);
+    camera.position.copy(dir.multiplyScalar(dist));
+    camera.near = dist / 100; camera.far = dist * 20;
+    camera.updateProjectionMatrix();
+    controls.update();
+  }
+
+  function select(id) {
+    const r = runs.find((x) => x.id === id) || runs[0];
+    document.querySelectorAll(".tab").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.id === r.id)));
+    const name = NAMES[r.id] || r.id;
+    for (const k of ["input", "mask", "depth", "isolated", "textured"]) $("p-" + k).src = r.panels[k];
+    $("c-input").textContent = `--prompt "${r.prompt}"`;
+    $("s-title").textContent = name;
+    $("s-prompt").textContent = `“${r.prompt}”`;
+    $("s-score").textContent = r.sam_score.toFixed(3);
+    $("s-size").textContent = `${r.width} × ${r.height}`;
+    $("s-cov").textContent = (r.mask_coverage * 100).toFixed(1) + "%";
+    $("s-dobj").textContent = r.mean_depth_object.toFixed(3);
+    $("s-dbg").textContent = r.mean_depth_background.toFixed(3);
+    $("b-dobj").style.width = (r.mean_depth_object * 100) + "%";
+    $("b-dbg").style.width = (r.mean_depth_background * 100) + "%";
+    $("s-pts").textContent = r.object.count.toLocaleString();
+    $("note-look").innerHTML = `<b>What to look for.</b> ${(LOOK[r.id] || ((x) => `Object mean depth ${x.mean_depth_object.toFixed(2)} vs background ${x.mean_depth_background.toFixed(2)}.`))(r)}`;
+    $("viewer-foot").textContent = `Every ${r.object_stride}th pixel inside the mask (${r.object.count.toLocaleString()} points), placed at (x, y, relative depth). Background points are every ${r.background_stride}th pixel. Depth is unitless, so the slider only changes how deep the relief looks.`;
+
+    if (!renderer) return;
+    if (objPoints) { scene.remove(objPoints, bgPoints); objPoints.geometry.dispose(); bgPoints.geometry.dispose(); }
+    const obj = decode(r.object), bg = decode(r.background);
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    for (let i = 0; i < obj.n; i++) {
+      const x = obj.xy[2 * i], y = obj.xy[2 * i + 1];
+      if (x < minX) minX = x; if (x > maxX) maxX = x; if (y < minY) minY = y; if (y > maxY) maxY = y;
+    }
+    current = { run: r, cx: (minX + maxX) / 2, cy: (minY + maxY) / 2, w: maxX - minX, h: maxY - minY };
+    objPoints = makePoints(obj, false);
+    bgPoints = makePoints(bg, true);
+    bgPoints.visible = $("showbg").checked;
+    scene.add(objPoints, bgPoints);
+    layout(); recolor(); resizePoints(); resetView();
+  }
+
+  function buildTabs() {
+    const nav = $("tabs");
+    for (const r of runs) {
+      const b = document.createElement("button");
+      b.type = "button"; b.className = "tab"; b.role = "tab"; b.dataset.id = r.id;
+      b.textContent = NAMES[r.id] || r.id;
+      b.addEventListener("click", () => { location.hash = toHash(r.id); });
+      nav.appendChild(b);
+    }
+  }
+
+  $("autorotate").addEventListener("change", (e) => { if (controls) controls.autoRotate = e.target.checked; });
+  $("exag").addEventListener("input", layout);
+  $("psize").addEventListener("input", resizePoints);
+  $("showbg").addEventListener("change", (e) => { if (bgPoints) bgPoints.visible = e.target.checked; });
+  $("reset").addEventListener("click", resetView);
+  document.querySelectorAll(".seg button").forEach((b) => b.addEventListener("click", () => {
+    colorMode = b.dataset.color;
+    document.querySelectorAll(".seg button").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+    if (objPoints) recolor();
+  }));
+  window.addEventListener("hashchange", () => select(fromHash(location.hash)));
+
+  fetch("data.json").then((res) => {
+    if (!res.ok) throw new Error(`data.json returned ${res.status}`);
+    return res.json();
+  }).then((data) => {
+    runs = data;
+    buildTabs();
+    try { initThree(); $("status").remove(); }
+    catch (err) { $("status").textContent = "The 3D view needs WebGL, which this browser has turned off. The panels above still show every output."; }
+    select(fromHash(location.hash));
+  }).catch((err) => {
+    $("status").textContent = `Could not load the pipeline outputs (${err.message}). Rebuild with python src/build_explorer.py and publish again.`;
+  });
+})();
+</script>

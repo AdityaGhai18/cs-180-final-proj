@@ -1,0 +1,12 @@
+{
+  "image": "data/images/04_monstera_plant.png",
+  "texture": "data/textures/procedural_orange_peel.png",
+  "prompt": "monstera plant",
+  "sam_score": 0.9375,
+  "mask_pixels": 433865,
+  "sam_model": "facebook/sam3",
+  "depth_model": "depth-anything/Depth-Anything-V2-Small-hf",
+  "device": "mps",
+  "depth_note": "Relative monocular depth; not metric distance.",
+  "texture_note": "Naive tiled texture with luminance shading; no depth-based warp yet."
+}
