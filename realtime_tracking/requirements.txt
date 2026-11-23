@@ -1,0 +1,4 @@
+# Extra packages for realtime_tracking/, on top of the repo's root requirements.txt.
+opencv-python==5.1.0.95
+remotezip==0.12.6
+timm==1.0.31
