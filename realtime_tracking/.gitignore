@@ -1,0 +1,3 @@
+# Downloaded Ref-DAVIS17 data (fetch with download_ref_davis.py)
+data/
+__pycache__/
